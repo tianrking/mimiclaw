@@ -3,6 +3,7 @@
 #include "wifi/wifi_manager.h"
 #include "channels/telegram/telegram_bot.h"
 #include "channels/feishu/feishu_bot.h"
+#include "channels/mqtt/mqtt_bot.h"
 #include "llm/llm_proxy.h"
 #include "memory/memory_store.h"
 #include "memory/session_mgr.h"
@@ -115,6 +116,67 @@ static int cmd_feishu_send(int argc, char **argv)
                                         feishu_send_args.text->sval[0]);
     printf("feishu_send status: %s\n", esp_err_to_name(err));
     return (err == ESP_OK) ? 0 : 1;
+}
+
+/* --- set_mqtt_config command --- */
+static struct {
+    struct arg_str *uri;
+    struct arg_str *client_id;
+    struct arg_str *username;
+    struct arg_str *password;
+    struct arg_end *end;
+} mqtt_config_args;
+
+static int cmd_set_mqtt_config(int argc, char **argv)
+{
+    int nerrors = arg_parse(argc, argv, (void **)&mqtt_config_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, mqtt_config_args.end, argv[0]);
+        return 1;
+    }
+
+    const char *uri = mqtt_config_args.uri->sval[0];
+    const char *client_id = mqtt_config_args.client_id->count > 0 ? mqtt_config_args.client_id->sval[0] : NULL;
+    const char *username = mqtt_config_args.username->count > 0 ? mqtt_config_args.username->sval[0] : NULL;
+    const char *password = mqtt_config_args.password->count > 0 ? mqtt_config_args.password->sval[0] : NULL;
+
+    esp_err_t err = mqtt_set_config(uri, client_id, username, password);
+    if (err != ESP_OK) {
+        printf("Failed to save MQTT config: %s\n", esp_err_to_name(err));
+        return 1;
+    }
+    printf("MQTT config saved. Restart to apply.\n");
+    return 0;
+}
+
+/* --- mqtt_send command --- */
+static struct {
+    struct arg_str *topic;
+    struct arg_str *text;
+    struct arg_end *end;
+} mqtt_send_args;
+
+static int cmd_mqtt_send(int argc, char **argv)
+{
+    int nerrors = arg_parse(argc, argv, (void **)&mqtt_send_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, mqtt_send_args.end, argv[0]);
+        return 1;
+    }
+
+    esp_err_t err = mqtt_send_message(mqtt_send_args.topic->sval[0],
+                                      mqtt_send_args.text->sval[0]);
+    printf("mqtt_send status: %s\n", esp_err_to_name(err));
+    return (err == ESP_OK) ? 0 : 1;
+}
+
+/* --- mqtt_status command --- */
+static int cmd_mqtt_status(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    printf("MQTT connected: %s\n", mqtt_is_connected() ? "yes" : "no");
+    return 0;
 }
 
 /* --- set_api_key command --- */
@@ -837,6 +899,40 @@ esp_err_t serial_cli_init(void)
         .argtable = &feishu_send_args,
     };
     esp_console_cmd_register(&feishu_send_cmd);
+
+    /* set_mqtt_config */
+    mqtt_config_args.uri = arg_str1(NULL, NULL, "<uri>", "MQTT broker URI (e.g. mqtt://broker:1883)");
+    mqtt_config_args.client_id = arg_str0(NULL, NULL, "<client_id>", "Client ID (optional)");
+    mqtt_config_args.username = arg_str0(NULL, NULL, "<username>", "Username (optional)");
+    mqtt_config_args.password = arg_str0(NULL, NULL, "<password>", "Password (optional)");
+    mqtt_config_args.end = arg_end(4);
+    esp_console_cmd_t mqtt_config_cmd = {
+        .command = "set_mqtt_config",
+        .help = "Set MQTT broker config: set_mqtt_config <uri> [client_id] [username] [password]",
+        .func = &cmd_set_mqtt_config,
+        .argtable = &mqtt_config_args,
+    };
+    esp_console_cmd_register(&mqtt_config_cmd);
+
+    /* mqtt_send */
+    mqtt_send_args.topic = arg_str1(NULL, NULL, "<topic>", "MQTT topic");
+    mqtt_send_args.text = arg_str1(NULL, NULL, "<text>", "Text message");
+    mqtt_send_args.end = arg_end(2);
+    esp_console_cmd_t mqtt_send_cmd = {
+        .command = "mqtt_send",
+        .help = "Send MQTT message: mqtt_send <topic> \"text\"",
+        .func = &cmd_mqtt_send,
+        .argtable = &mqtt_send_args,
+    };
+    esp_console_cmd_register(&mqtt_send_cmd);
+
+    /* mqtt_status */
+    esp_console_cmd_t mqtt_status_cmd = {
+        .command = "mqtt_status",
+        .help = "Show MQTT connection status",
+        .func = &cmd_mqtt_status,
+    };
+    esp_console_cmd_register(&mqtt_status_cmd);
 
     /* set_api_key */
     api_key_args.key = arg_str1(NULL, NULL, "<key>", "LLM API key");
