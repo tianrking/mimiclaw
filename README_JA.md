@@ -291,6 +291,7 @@ MimiClawにはcronスケジューラが内蔵されており、AIが自律的に
 
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — システム設計、モジュール構成、タスクレイアウト、メモリバジェット、プロトコル、Flashパーティション
 - **[docs/TODO.md](docs/TODO.md)** — 機能ギャップとロードマップ
+- **[docs/WIFI_ONBOARDING_AP.md](docs/WIFI_ONBOARDING_AP.md)** — ローカル `MimiClaw-XXXX` onboarding / 管理アクセスポイントの使い方
 - **[docs/im-integration/](docs/im-integration/README.md)** — IMチャネル統合ガイド（Feishuなど）
 
 ## 貢献
