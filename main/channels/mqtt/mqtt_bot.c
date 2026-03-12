@@ -197,6 +197,28 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
 
 esp_err_t mqtt_bot_init(void)
 {
+    /* Start with build-time secrets as defaults */
+#ifdef MIMI_SECRET_MQTT_URI
+    if (MIMI_SECRET_MQTT_URI[0] != '\0') {
+        strncpy(s_broker_uri, MIMI_SECRET_MQTT_URI, sizeof(s_broker_uri) - 1);
+    }
+#endif
+#ifdef MIMI_SECRET_MQTT_CLIENT_ID
+    if (MIMI_SECRET_MQTT_CLIENT_ID[0] != '\0') {
+        strncpy(s_client_id, MIMI_SECRET_MQTT_CLIENT_ID, sizeof(s_client_id) - 1);
+    }
+#endif
+#ifdef MIMI_SECRET_MQTT_USERNAME
+    if (MIMI_SECRET_MQTT_USERNAME[0] != '\0') {
+        strncpy(s_username, MIMI_SECRET_MQTT_USERNAME, sizeof(s_username) - 1);
+    }
+#endif
+#ifdef MIMI_SECRET_MQTT_PASSWORD
+    if (MIMI_SECRET_MQTT_PASSWORD[0] != '\0') {
+        strncpy(s_password, MIMI_SECRET_MQTT_PASSWORD, sizeof(s_password) - 1);
+    }
+#endif
+
     /* Load configuration from NVS (overrides build-time) */
     nvs_handle_t nvs;
     if (nvs_open(MIMI_NVS_MQTT, NVS_READONLY, &nvs) == ESP_OK) {
@@ -332,6 +354,18 @@ esp_err_t mqtt_send_message(const char *topic, const char *text)
         return ESP_ERR_INVALID_STATE;
     }
 
+    /* Convert request topic to response topic */
+    char response_topic[256];
+    if (strstr(topic, "/request")) {
+        /* Replace /request with /response */
+        size_t len = strlen(topic);
+        size_t prefix_len = strstr(topic, "/request") - topic;
+        snprintf(response_topic, sizeof(response_topic), "%.*s/response", (int)prefix_len, topic);
+    } else {
+        /* No /request suffix, just use as-is */
+        strncpy(response_topic, topic, sizeof(response_topic) - 1);
+    }
+
     /* Split long messages if needed */
     size_t text_len = strlen(text);
     size_t offset = 0;
@@ -364,14 +398,14 @@ esp_err_t mqtt_send_message(const char *topic, const char *text)
         }
 
         /* Publish message */
-        int msg_id = esp_mqtt_client_publish(s_mqtt_client, topic, json_str, 0, 1, 0);
+        int msg_id = esp_mqtt_client_publish(s_mqtt_client, response_topic, json_str, 0, 1, 0);
         free(json_str);
 
         if (msg_id < 0) {
-            ESP_LOGE(TAG, "Failed to publish to %s", topic);
+            ESP_LOGE(TAG, "Failed to publish to %s", response_topic);
             all_ok = 0;
         } else {
-            ESP_LOGI(TAG, "Published to %s (%d bytes, msg_id=%d)", topic, (int)chunk, msg_id);
+            ESP_LOGI(TAG, "Published to %s (%d bytes, msg_id=%d)", response_topic, (int)chunk, msg_id);
         }
 
         offset += chunk;
